@@ -4,6 +4,7 @@ import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
+import android.graphics.Typeface
 import android.util.AttributeSet
 import android.view.MotionEvent
 import android.view.View
@@ -15,54 +16,166 @@ import com.google.gson.reflect.TypeToken
 class DutyStatusGraphView(context: Context, attrs: AttributeSet?) : View(context, attrs) {
     private var dutyStatusList: List<DutyStatus> = listOf(
         DutyStatus(DutyStatus.OFF_DUTY, 5, 6),
-        DutyStatus(DutyStatus.OFF_DUTY, 7, 8),
-        DutyStatus(DutyStatus.OFF_DUTY, 7, 8),
-        DutyStatus(DutyStatus.SLEEPER, 11, 12),
-        DutyStatus(DutyStatus.DRIVING, 4, 5),
-        DutyStatus(DutyStatus.ON_DUTY, 3, 4)
+        DutyStatus(DutyStatus.OFF_DUTY, 12, 20),
+        DutyStatus(DutyStatus.SLEEPER, 6, 12),
+        DutyStatus(DutyStatus.DRIVING, 1, 5),
+        DutyStatus(DutyStatus.ON_DUTY, 0, 1)
     )
+
     private var selectedStatusIndex = -1
 
     init {
         // Load duty status data from SharedPreferences
         //dutyStatusList = loadDutyStatusData(context.applicationContext)
+        dutyStatusList = sortList(dutyStatusList)
+
     }
+
+    private fun sortList(list: List<DutyStatus>) = list.sortedBy { it.startTime }
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
-        val widthPerHour = 50f // 1 hour is 50 pixels
+        val offSetStart = 200f
+        val offSetEnd = 200f
+        val offSetTop = 100f
+        val offSetBottom = 100f
+        val widthPerHour = (width.toFloat() - (offSetStart + offSetEnd)) / 24
         val graphHeight = height.toFloat() // Use the full height of the view for the graph
         val lineHeight =
-            graphHeight / 5 // Divide the height by the number of statuses (4) + 1 for the x-axis
+            (graphHeight - (offSetTop + offSetBottom)) / 4
         val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = Color.BLACK
             textSize = 30f // Set the desired text size
         }
         val linePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            strokeWidth = 5f // Set the desired line thickness
+            strokeWidth = 3f // Set the desired line thickness
+            color = Color.BLACK
         }
 
         // Draw the x-axis and y-axis
-        canvas.drawLine(0f, lineHeight * 4, width.toFloat(), lineHeight * 4, linePaint) // x-axis
-        canvas.drawLine(0f, 0f, 0f, graphHeight, linePaint) // y-axis
+        canvas.drawLine(
+            0f + offSetStart,
+            graphHeight - offSetBottom,
+            width.toFloat() - offSetEnd,
+            graphHeight - offSetBottom,
+            linePaint
+        ) // x-axis
+        canvas.drawLine(
+            0f + offSetStart,
+            0f + offSetTop,
+            0f + offSetStart,
+            graphHeight - offSetBottom,
+            linePaint
+        ) // y-axis
+
+        canvas.drawLine(
+            width.toFloat() - offSetEnd,
+            graphHeight - offSetBottom,
+            width.toFloat() - offSetEnd,
+            0f + offSetTop,
+            linePaint
+        )
+        canvas.drawLine(
+            width.toFloat() - offSetEnd,
+            0f + offSetTop,
+            0f + offSetStart,
+            0f + offSetTop,
+            linePaint
+        )
+
+        //Draw the 24 equal divisions and vertical lines
+        for (i in 1..23) {
+            val x = i * widthPerHour + offSetStart
+            // Draw the vertical line
+            canvas.drawLine(x, 0f + offSetTop, x, graphHeight - offSetBottom, linePaint)
+
+            // Draw the hour marker
+            canvas.drawText("$i", x - 10f, graphHeight - offSetBottom + 30f, textPaint)
+            canvas.drawText("$i", x - 10f, 0f + offSetTop - 10f, textPaint)
+        }
+        // mark 1st and last hour markers
+        canvas.drawText("0", offSetStart - 10f, graphHeight - offSetBottom + 30f, textPaint)
+        canvas.drawText("0", offSetStart - 10f, 0f + offSetTop - 10f, textPaint)
+        canvas.drawText("24", width - offSetEnd - 10f, graphHeight - offSetBottom + 30f, textPaint)
+        canvas.drawText("24", width - offSetEnd - 10f, 0f + offSetTop - 10f, textPaint)
+
+        //Draw the 4 equal divisions and horizontal lines
+        for (i in 1..3) {
+            val y = i * lineHeight + offSetTop
+            // Draw the horizontal line
+            canvas.drawLine(0f, y, width.toFloat(), y, linePaint)
+
+            // Draw the duty status text
+            canvas.drawText(
+                when (i) {
+                    1 -> "Off-Duty"
+                    2 -> "Sleeper Berth"
+                    3 -> "Driving"
+                    else -> ""
+                }, 0f, y - 50f, textPaint
+            )
+
+        }
+        // draw last duty status at bottom
+        canvas.drawText("On-Duty", 0f, graphHeight - offSetBottom - 50f, textPaint)
+
+        // draw remaining lines
+        canvas.drawLine(
+            0f,
+            graphHeight - offSetBottom,
+            0f + offSetStart,
+            graphHeight - offSetBottom,
+            linePaint
+        )
+        canvas.drawLine(
+            width.toFloat() - offSetEnd,
+            graphHeight - offSetBottom,
+            width.toFloat(),
+            graphHeight - offSetBottom,
+            linePaint
+        )
+        // Draw remaining texts
+        textPaint.apply {
+            typeface = Typeface.DEFAULT_BOLD
+        }
+        canvas.drawText("DUTY STATUS", 0f, 50f, textPaint)
+        canvas.drawText("Total Hours", width.toFloat() - offSetEnd + 20f, 50f, textPaint)
 
         // Draw the lines for each duty status
-        dutyStatusList.forEach { dutyStatus ->
-            val startX = dutyStatus.startTime * widthPerHour
-            val endX = dutyStatus.endTime * widthPerHour
+        dutyStatusList.forEachIndexed { index, dutyStatus ->
+            val startX = dutyStatus.startTime * widthPerHour + offSetStart
+            val endX = dutyStatus.endTime * widthPerHour + offSetStart
             val yPosition = when (dutyStatus.status) {
-                DutyStatus.OFF_DUTY -> lineHeight * 0
-                DutyStatus.SLEEPER -> lineHeight * 1
-                DutyStatus.DRIVING -> lineHeight * 2
-                DutyStatus.ON_DUTY -> lineHeight * 3
+                DutyStatus.OFF_DUTY -> lineHeight * 0 + offSetTop + (lineHeight / 2)
+                DutyStatus.SLEEPER -> lineHeight * 1 + offSetTop + (lineHeight / 2)
+                DutyStatus.DRIVING -> lineHeight * 2 + offSetTop + (lineHeight / 2)
+                DutyStatus.ON_DUTY -> lineHeight * 3 + offSetTop + (lineHeight / 2)
                 else -> 0f
             }
-
+            linePaint.strokeWidth = 10f
             // Change the line color to blue when the status is DRIVING
             linePaint.color = if (dutyStatus.status == DutyStatus.DRIVING) Color.BLUE else Color.RED
 
             // Draw the status line
             canvas.drawLine(startX, yPosition, endX, yPosition, linePaint)
+            // Reset line color back to red
+            linePaint.color = Color.RED
+
+            // Connect this line to the next one if it's not the last item
+            if (index < dutyStatusList.size - 1) {
+                val nextDutyStatus = dutyStatusList[index + 1]
+                val nextStartX = nextDutyStatus.startTime * widthPerHour + offSetStart
+                val nextYPosition = when (nextDutyStatus.status) {
+                    DutyStatus.OFF_DUTY -> lineHeight * 0 + offSetTop + (lineHeight / 2)
+                    DutyStatus.SLEEPER -> lineHeight * 1 + offSetTop + (lineHeight / 2)
+                    DutyStatus.DRIVING -> lineHeight * 2 + offSetTop + (lineHeight / 2)
+                    DutyStatus.ON_DUTY -> lineHeight * 3 + offSetTop + (lineHeight / 2)
+                    else -> 0f
+                }
+
+                //Draw a line connecting the end of the current status to the start of the next
+                canvas.drawLine(endX, yPosition, nextStartX, nextYPosition, linePaint)
+            }
         }
 
         // Draw the total time spent in each status on the right side
@@ -71,37 +184,42 @@ class DutyStatusGraphView(context: Context, attrs: AttributeSet?) : View(context
             textSize = 30f // Set the desired text size
             textAlign = Paint.Align.RIGHT // Align text to the right
         }
-        val totalHoursYOffset = lineHeight / 2 // Center the text vertically in each line
-        val totalHoursXPosition = width.toFloat() - 10 // 10 pixels padding from the right edge
 
-        // Assuming you have a method to calculate total hours for each status
         val totalOffDutyHours = calculateTotalHours(dutyStatusList, DutyStatus.OFF_DUTY)
         val totalSleeperHours = calculateTotalHours(dutyStatusList, DutyStatus.SLEEPER)
         val totalDrivingHours = calculateTotalHours(dutyStatusList, DutyStatus.DRIVING)
         val totalOnDutyHours = calculateTotalHours(dutyStatusList, DutyStatus.ON_DUTY)
+        val totalHours =
+            totalOffDutyHours + totalSleeperHours + totalDrivingHours + totalOnDutyHours
 
         canvas.drawText(
             "$totalOffDutyHours",
-            totalHoursXPosition,
-            lineHeight * 0 + totalHoursYOffset,
+            width.toFloat() - offSetEnd + 100f,
+            0 * lineHeight + offSetTop + lineHeight / 2,
             totalTimePaint
         )
         canvas.drawText(
             "$totalSleeperHours",
-            totalHoursXPosition,
-            lineHeight * 1 + totalHoursYOffset,
+            width.toFloat() - offSetEnd + 100f,
+            1 * lineHeight + offSetTop + lineHeight / 2,
             totalTimePaint
         )
         canvas.drawText(
             "$totalDrivingHours",
-            totalHoursXPosition,
-            lineHeight * 2 + totalHoursYOffset,
+            width.toFloat() - offSetEnd + 100f,
+            2 * lineHeight + offSetTop + lineHeight / 2,
             totalTimePaint
         )
         canvas.drawText(
             "$totalOnDutyHours",
-            totalHoursXPosition,
-            lineHeight * 3 + totalHoursYOffset,
+            width.toFloat() - offSetEnd + 100f,
+            3 * lineHeight + offSetTop + lineHeight / 2,
+            totalTimePaint
+        )
+        canvas.drawText(
+            "$totalHours",
+            width.toFloat() - offSetEnd + 100f,
+            graphHeight - offSetBottom + 50f,
             totalTimePaint
         )
     }
