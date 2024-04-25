@@ -14,34 +14,41 @@ import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 
 class DutyStatusGraphView(context: Context, attrs: AttributeSet?) : View(context, attrs) {
-    private var dutyStatusList: List<DutyStatus> = listOf(
-        DutyStatus(DutyStatus.OFF_DUTY, 5, 6),
-        DutyStatus(DutyStatus.OFF_DUTY, 12, 20),
-        DutyStatus(DutyStatus.SLEEPER, 6, 12),
-        DutyStatus(DutyStatus.DRIVING, 1, 5),
-        DutyStatus(DutyStatus.ON_DUTY, 0, 1)
-    )
 
-    private var selectedStatusIndex = -1
-
-    init {
-        // Load duty status data from SharedPreferences
-        //dutyStatusList = loadDutyStatusData(context.applicationContext)
-        dutyStatusList = sortList(dutyStatusList)
-
+    constructor(
+        context: Context,
+        attrs: AttributeSet?,
+        dutyStatusList: MutableList<DutyStatus>
+    ) : this(
+        context,
+        attrs
+    ) {
+        this.dutyStatusList = dutyStatusList
     }
 
-    private fun sortList(list: List<DutyStatus>) = list.sortedBy { it.startTime }
+    private var dutyStatusList: MutableList<DutyStatus> = mutableListOf()
+
+    // Lambda property for click listener
+    var onClick: ((dutyStatus: DutyStatus) -> Unit)? = null
+
+    private var offSetStart = 200f
+    private var offSetEnd = 200f
+    private var offSetTop = 100f
+    private var offSetBottom = 100f
+    private var widthPerHour = (width.toFloat() - (offSetStart + offSetEnd)) / 24
+    private var graphHeight = height.toFloat()
+    private var lineHeight =
+        (graphHeight - (offSetTop + offSetBottom)) / 4
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
-        val offSetStart = 200f
-        val offSetEnd = 200f
-        val offSetTop = 100f
-        val offSetBottom = 100f
-        val widthPerHour = (width.toFloat() - (offSetStart + offSetEnd)) / 24
-        val graphHeight = height.toFloat() // Use the full height of the view for the graph
-        val lineHeight =
+        offSetStart = 200f
+        offSetEnd = 200f
+        offSetTop = 100f
+        offSetBottom = 100f
+        widthPerHour = (width.toFloat() - (offSetStart + offSetEnd)) / 24
+        graphHeight = height.toFloat() // Use the full height of the view for the graph
+        lineHeight =
             (graphHeight - (offSetTop + offSetBottom)) / 4
         val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = Color.BLACK
@@ -225,24 +232,23 @@ class DutyStatusGraphView(context: Context, attrs: AttributeSet?) : View(context
     }
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
-        if (event.action == MotionEvent.ACTION_DOWN) {
-            val x = event.x.toInt()
-            val y = event.y.toInt()
-            // Determine which duty status block was clicked
-            // Update the selectedStatusIndex and dutyStatusList accordingly
-            // Invalidate the view to trigger a redraw
-        }
-        return true
-    }
+        when (event.action) {
+            MotionEvent.ACTION_DOWN -> {
+                return true
+            }
 
-    private fun saveDutyStatusData(context: Context, dutyStatusList: List<DutyStatus>) {
-        val sharedPreferences =
-            context.getSharedPreferences("DutyStatusPrefs", Context.MODE_PRIVATE)
-        val editor = sharedPreferences.edit()
-        val gson = Gson()
-        val json = gson.toJson(dutyStatusList)
-        editor.putString("DutyStatusData", json)
-        editor.apply()
+            MotionEvent.ACTION_UP -> {
+                val dutyStatus = getDutyStatusFromClick(event.x, event.y)
+                if (dutyStatus != null) {
+                    onClick?.invoke(dutyStatus)
+                    dutyStatusList.add(dutyStatus)
+                    invalidate()
+                }
+                performClick()
+                return true
+            }
+        }
+        return super.onTouchEvent(event) // For other actions, defer to the superclass implementation
     }
 
     private fun calculateTotalHours(dutyStatusList: List<DutyStatus>, status: String): Int {
@@ -251,13 +257,23 @@ class DutyStatusGraphView(context: Context, attrs: AttributeSet?) : View(context
             .sumOf { it.endTime - it.startTime }
     }
 
-    private fun loadDutyStatusData(context: Context): List<DutyStatus> {
-        val sharedPreferences =
-            context.getSharedPreferences("DutyStatusPrefs", Context.MODE_PRIVATE)
-        val json = sharedPreferences.getString("DutyStatusData", null)
-        val type = object : TypeToken<List<DutyStatus>>() {}.type
-        return Gson().fromJson(json, type) ?: emptyList()
-    }
-
     // Helper methods to draw the graph and handle touch events
+    private fun getDutyStatusFromClick(x: Float, y: Float): DutyStatus? {
+        // check if x and y is inside the graph
+        if (x > offSetStart && x < width - offSetEnd && y > offSetTop && y < graphHeight - offSetBottom) {
+            val col: Int = ((x - offSetStart) / widthPerHour).toInt()
+            val row: Int = ((y - offSetTop) / lineHeight).toInt()
+            val dutyStatus = when (row) {
+                0 -> DutyStatus.OFF_DUTY
+                1 -> DutyStatus.SLEEPER
+                2 -> DutyStatus.DRIVING
+                3 -> DutyStatus.ON_DUTY
+                else -> null
+            }
+            if (dutyStatus != null && col == dutyStatusList.last().endTime) {
+                return DutyStatus(dutyStatus, col, col + 1)
+            }
+        }
+        return null
+    }
 }
